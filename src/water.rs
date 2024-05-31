@@ -57,6 +57,7 @@ pub fn spawn_water(
             base: StandardMaterial {
                 base_color: BLACK.into(),
                 perceptual_roughness: 0.0,
+                // alpha_mode: AlphaMode::Blend,
                 ..default()
             },
             extension: Water {

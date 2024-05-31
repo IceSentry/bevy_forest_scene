@@ -20,7 +20,7 @@ use bevy::{
     scene::SceneInstance,
 };
 use camera_controller::CameraController;
-use noise::{NoiseFn, Simplex};
+use noise::{Fbm, MultiFractal, NoiseFn, Simplex};
 use plane::Plane;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
@@ -61,6 +61,7 @@ fn main() {
                 camera_controller::camera_controller,
                 customize_scene_materials,
                 spawn_terrain,
+                toggle_wireframe,
             ),
         )
         .run();
@@ -132,7 +133,7 @@ fn spawn_camera(mut commands: Commands, asset_server: Res<AssetServer>) {
 struct Terrain {
     material: Handle<StandardMaterial>,
     half_size: u32,
-    simplex: Simplex,
+    fbm: Fbm<Simplex>,
 }
 
 impl Terrain {
@@ -140,7 +141,7 @@ impl Terrain {
         let scale = 0.05;
         let pos = pos * scale;
         let pos = pos.as_dvec2();
-        self.simplex.get([pos.x, 0.0, pos.y]) as f32
+        (self.fbm.get([pos.x, 0.0, pos.y]) as f32) * 100.0
     }
 
     fn generate_mesh(&self) -> Mesh {
@@ -168,8 +169,8 @@ fn setup_terrain(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     let terrain = Terrain {
         material: asset_server.load("forest_ground/forest_ground_04_4k.gltf#Material0"),
-        half_size: 100,
-        simplex: Simplex::new(42),
+        half_size: 200,
+        fbm: Fbm::<Simplex>::new(42).set_frequency(0.05).set_octaves(4),
     };
 
     let tree = asset_server.load("pine_tree_game-ready.glb#Scene0");
@@ -272,5 +273,14 @@ pub fn customize_scene_materials(
             material.metallic = 0.0;
             material.reflectance = 0.0;
         }
+    }
+}
+
+fn toggle_wireframe(
+    mut wireframe_config: ResMut<WireframeConfig>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+) {
+    if keyboard.just_pressed(KeyCode::KeyT) {
+        wireframe_config.global = !wireframe_config.global;
     }
 }
