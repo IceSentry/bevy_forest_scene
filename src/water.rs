@@ -50,6 +50,7 @@ pub fn spawn_water(
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut water_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, Water>>>,
+    mut foam_materials: ResMut<Assets<FoamMaterial>>,
 ) {
     commands.spawn(MaterialMeshBundle {
         mesh: meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(1.0))),
@@ -86,7 +87,28 @@ pub fn spawn_water(
             },
         }),
         transform: Transform::from_scale(Vec3::splat(1000.0))
-            .with_translation(Vec3::new(0.0, -0.005, 0.0)),
+            .with_translation(Vec3::new(0.0, -0.05, 0.0)),
         ..default()
     });
+    // add foam just above the water
+    commands.spawn(MaterialMeshBundle {
+        mesh: meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(1.0))),
+        material: foam_materials.add(FoamMaterial {}),
+        transform: Transform::from_scale(Vec3::splat(1000.0))
+            .with_translation(Vec3::new(0.0, 0.0, 0.0)),
+        ..default()
+    });
+}
+
+#[derive(Asset, AsBindGroup, Clone, TypePath)]
+pub struct FoamMaterial {}
+
+impl Material for FoamMaterial {
+    fn fragment_shader() -> ShaderRef {
+        "foam.wgsl".into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Blend
+    }
 }

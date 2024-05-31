@@ -19,6 +19,7 @@ use bevy::{
 };
 use camera_controller::CameraController;
 use terrain::{TerrainConfig, TerrainResources};
+use water::FoamMaterial;
 
 mod camera_controller;
 mod plane;
@@ -39,10 +40,9 @@ fn main() {
             }),
             TemporalAntiAliasPlugin,
             WireframePlugin,
+            MaterialPlugin::<FoamMaterial>::default(),
+            MaterialPlugin::<ExtendedMaterial<StandardMaterial, water::Water>>::default(),
         ))
-        .add_plugins(MaterialPlugin::<
-            ExtendedMaterial<StandardMaterial, water::Water>,
-        >::default())
         .insert_resource(WireframeConfig {
             global: false,
             ..default()

@@ -7,6 +7,7 @@
     pbr_deferred_functions::deferred_output,
     pbr_fragment::pbr_input_from_standard_material,
     prepass_io::{VertexOutput, FragmentOutput},
+    prepass_utils,
 }
 #import bevy_render::globals::Globals
 
@@ -54,6 +55,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var pbr_input = pbr_input_from_standard_material(in, is_front);
     // Bump the normal.
     pbr_input.N = sample_noise(in.uv, globals.time * 0.15);
+
+    // let depth = bevy_pbr::prepass_utils::prepass_depth(in.position, 0u);
+
     // Send the rest to the deferred shader.
     return deferred_output(in, pbr_input);
 }
