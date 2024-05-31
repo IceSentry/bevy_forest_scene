@@ -5,6 +5,7 @@ use bevy::{
     core_pipeline::{
         dof::DepthOfFieldSettings,
         experimental::taa::{TemporalAntiAliasBundle, TemporalAntiAliasPlugin},
+        motion_blur::{self, MotionBlur, MotionBlurBundle},
         prepass::{DeferredPrepass, DepthPrepass},
         tonemapping::Tonemapping,
         Skybox,
@@ -92,6 +93,8 @@ struct SceneConfig {
     directional_light_color: Color,
     directional_light_looking_to: Vec3,
     tonemapping: Tonemapping,
+    motion_blur_shutter_angle: f32,
+    motion_blur_samples: u32,
 }
 
 impl Default for SceneConfig {
@@ -105,6 +108,8 @@ impl Default for SceneConfig {
             directional_light_color: Srgba::new(1.0, 0.75, 0.0, 1.0).into(),
             directional_light_looking_to: Vec3::new(-10.0, -1.0, 7.0),
             tonemapping: Tonemapping::default(),
+            motion_blur_shutter_angle: 0.5,
+            motion_blur_samples: 1,
         }
     }
 }
@@ -137,6 +142,7 @@ fn spawn_camera(mut commands: Commands, asset_server: Res<AssetServer>) {
             ScreenSpaceReflectionsSettings::default(),
             ScreenSpaceAmbientOcclusionSettings::default(),
             DepthOfFieldSettings::default(),
+            MotionBlur::default(),
             // ColorGrading {
             //     global: todo!(),
             //     shadows: todo!(),
@@ -209,18 +215,21 @@ fn on_scene_config_loaded(
         &mut Skybox,
         &mut VolumetricFogSettings,
         &mut Tonemapping,
+        &mut MotionBlur,
     )>,
     mut directional_light: Query<(&mut DirectionalLight, &mut Transform)>,
 ) {
     println!("scene config changed");
 
-    for (mut env_map_light, mut skybox, mut fog, mut tonemapping) in &mut camera {
+    for (mut env_map_light, mut skybox, mut fog, mut tonemapping, mut motion_blur) in &mut camera {
         env_map_light.intensity = scene_config.env_map_intensity;
         skybox.brightness = scene_config.skybox_brightness;
         fog.ambient_intensity = scene_config.fog_ambient_intensity;
         fog.fog_color = scene_config.fog_color;
         fog.light_intensity = scene_config.fog_light_intensity;
         *tonemapping = scene_config.tonemapping;
+        motion_blur.shutter_angle = scene_config.motion_blur_shutter_angle;
+        motion_blur.samples = scene_config.motion_blur_samples;
     }
 
     for (mut directional_light, mut transform) in &mut directional_light {

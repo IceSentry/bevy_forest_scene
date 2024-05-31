@@ -23,6 +23,8 @@
         z: 7.0,
       ),
       tonemapping: TonyMcMapface,
+      motion_blur_shutter_angle: 1.0,
+      motion_blur_samples: 2,
     ),
   },
   entities: {},
