@@ -1,0 +1,11 @@
+(
+  resources: {
+    "bevy_forest_scene::terrain::TerrainConfig": (
+      half_size: 300,
+      seed: 30,
+      frequency: 0.05,
+      octaves: 6,
+    ),
+  },
+  entities: {},
+)

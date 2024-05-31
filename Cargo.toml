@@ -13,6 +13,7 @@ bevy = { git = "https://github.com/bevyengine/bevy.git", default-features = fals
     "bevy_winit",
     "tonemapping_luts",
     "multi_threaded",
+    "file_watcher",
 ] }
 noise = "0.9.0"
 rand = "0.8.5"

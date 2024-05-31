@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use bevy::{
     core_pipeline::{
         dof::DepthOfFieldSettings,
@@ -6,26 +8,20 @@ use bevy::{
         tonemapping::Tonemapping,
         Skybox,
     },
-    math::{vec2, vec3, Affine2},
     pbr::{
         wireframe::{WireframeConfig, WireframePlugin},
         DefaultOpaqueRendererMethod, ExtendedMaterial, ScreenSpaceAmbientOcclusionSettings,
         ScreenSpaceReflectionsSettings, VolumetricFogSettings, VolumetricLight,
     },
     prelude::*,
-    render::{
-        mesh::VertexAttributeValues,
-        texture::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor},
-    },
-    scene::SceneInstance,
+    tasks::IoTaskPool,
 };
 use camera_controller::CameraController;
-use noise::{Fbm, MultiFractal, NoiseFn, Simplex};
-use plane::Plane;
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use terrain::TerrainConfig;
 
 mod camera_controller;
 mod plane;
+mod terrain;
 mod water;
 
 fn main() {
@@ -54,14 +50,25 @@ fn main() {
             color: Color::srgb(1.0, 1.0, 1.0),
             brightness: 0.0,
         })
-        .add_systems(Startup, (spawn_camera, setup_terrain, water::spawn_water))
+        .register_type::<TerrainConfig>()
+        .add_systems(
+            Startup,
+            (
+                spawn_camera,
+                terrain::setup_terrain_resources,
+                water::spawn_water,
+                // save_scene_system,
+                terrain::load_terrain_config,
+            ),
+        )
         .add_systems(
             Update,
             (
                 camera_controller::camera_controller,
-                customize_scene_materials,
-                spawn_terrain,
+                terrain::customize_tree_material,
+                terrain::fix_ground_material,
                 toggle_wireframe,
+                terrain::on_terrain_config_loaded,
             ),
         )
         .run();
@@ -129,153 +136,6 @@ fn spawn_camera(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 }
 
-#[derive(Resource)]
-struct Terrain {
-    material: Handle<StandardMaterial>,
-    half_size: u32,
-    fbm: Fbm<Simplex>,
-}
-
-impl Terrain {
-    fn get_height(&self, pos: Vec2) -> f32 {
-        let scale = 0.05;
-        let pos = pos * scale;
-        let pos = pos.as_dvec2();
-        (self.fbm.get([pos.x, 0.0, pos.y]) as f32) * 100.0
-    }
-
-    fn generate_mesh(&self) -> Mesh {
-        let mut plane: Mesh = Plane {
-            size: self.half_size as f32 * 2.0,
-            subdivisions: self.half_size * 2,
-        }
-        .into();
-
-        match plane.attribute_mut(Mesh::ATTRIBUTE_POSITION).unwrap() {
-            VertexAttributeValues::Float32x3(vertices) => {
-                for pos in vertices {
-                    pos[1] = self.get_height(vec2(pos[0], pos[2])) as f32;
-                }
-            }
-            _ => unreachable!(),
-        }
-
-        plane
-    }
-}
-
-fn setup_terrain(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let mut rng = StdRng::seed_from_u64(42);
-
-    let terrain = Terrain {
-        material: asset_server.load("forest_ground/forest_ground_04_4k.gltf#Material0"),
-        half_size: 200,
-        fbm: Fbm::<Simplex>::new(42).set_frequency(0.05).set_octaves(4),
-    };
-
-    let tree = asset_server.load("pine_tree_game-ready.glb#Scene0");
-    for x in -(terrain.half_size as i32)..terrain.half_size as i32 {
-        for z in -(terrain.half_size as i32)..terrain.half_size as i32 {
-            let terrain_height = terrain.get_height(vec2(x as f32, z as f32));
-            if terrain_height < 0.0 || rng.gen_range(0.0..1.0) < 0.95 {
-                continue;
-            }
-
-            // add a random offset to make it less grid like
-            let random_offset = vec3(rng.gen_range(-0.5..0.5), 0.0, rng.gen_range(-0.25..0.25));
-            let translation = vec3(x as f32, terrain_height, z as f32) + random_offset;
-
-            commands.spawn((
-                SceneBundle {
-                    scene: tree.clone(),
-                    transform: Transform::from_translation(translation)
-                        .with_scale(Vec3::splat(rng.gen_range(0.12..0.15)))
-                        .with_rotation(Quat::from_axis_angle(
-                            Vec3::Y,
-                            rng.gen_range(0.0..std::f32::consts::TAU),
-                        )),
-                    ..default()
-                },
-                CustomizeMaterial,
-            ));
-        }
-    }
-
-    commands.insert_resource(terrain);
-}
-
-fn spawn_terrain(
-    mut commands: Commands,
-    terrain: Option<Res<Terrain>>,
-    mut std_materials: ResMut<Assets<StandardMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut images: ResMut<Assets<Image>>,
-    mut spawned: Local<bool>,
-) {
-    if *spawned {
-        return;
-    }
-    let Some(terrain) = terrain else {
-        return;
-    };
-    let Some(material) = std_materials.get_mut(&terrain.material) else {
-        return;
-    };
-    let Some(image) = material
-        .base_color_texture
-        .as_ref()
-        .and_then(|t| images.get_mut(t))
-    else {
-        return;
-    };
-
-    image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-        label: Some("terrain sampler".into()),
-        address_mode_u: ImageAddressMode::Repeat,
-        address_mode_v: ImageAddressMode::Repeat,
-        ..ImageSamplerDescriptor::linear()
-    });
-    material.uv_transform = Affine2::from_scale(vec2(20.0, 20.0));
-
-    let terrain_mesh = terrain.generate_mesh();
-
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(terrain_mesh),
-        material: terrain.material.clone(),
-        ..default()
-    });
-    *spawned = true;
-}
-
-#[derive(Component)]
-pub struct CustomizeMaterial;
-
-pub fn customize_scene_materials(
-    mut commands: Commands,
-    unloaded_instances: Query<(Entity, &SceneInstance), With<CustomizeMaterial>>,
-    handles: Query<(Entity, &Handle<StandardMaterial>)>,
-    mut pbr_materials: ResMut<Assets<StandardMaterial>>,
-    scene_manager: Res<SceneSpawner>,
-) {
-    for (entity, instance) in unloaded_instances.iter() {
-        if scene_manager.instance_is_ready(**instance) {
-            commands.entity(entity).remove::<CustomizeMaterial>();
-        }
-        // Iterate over all entities in scene (once it's loaded)
-        let handles = handles.iter_many(scene_manager.iter_instance_entities(**instance));
-        for (_entity, material_handle) in handles {
-            let Some(material) = pbr_materials.get_mut(material_handle) else {
-                continue;
-            };
-
-            material.alpha_mode = AlphaMode::Mask(0.5);
-            material.perceptual_roughness = 1.0;
-            material.metallic = 0.0;
-            material.reflectance = 0.0;
-        }
-    }
-}
-
 fn toggle_wireframe(
     mut wireframe_config: ResMut<WireframeConfig>,
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -283,4 +143,33 @@ fn toggle_wireframe(
     if keyboard.just_pressed(KeyCode::KeyT) {
         wireframe_config.global = !wireframe_config.global;
     }
+}
+
+// This is just there in case I need another dynamic scene
+fn _save_scene_system(world: &mut World) {
+    let mut scene_world = World::new();
+    let type_registry = world.resource::<AppTypeRegistry>().clone();
+    scene_world.insert_resource(type_registry);
+    // scene_world.insert_resource(TerrainConfig {
+    //     half_size: 200,
+    //     seed: 42,
+    //     frequency: 0.05,
+    //     octaves: 6,
+    // });
+    let scene = DynamicScene::from_world(&scene_world);
+    let type_registry = world.resource::<AppTypeRegistry>();
+    let type_registry = type_registry.read();
+    let serialized_scene = scene.serialize(&type_registry).unwrap();
+
+    info!("{}", serialized_scene);
+
+    #[cfg(not(target_arch = "wasm32"))]
+    IoTaskPool::get()
+        .spawn(async move {
+            // Write the scene RON data to file
+            std::fs::File::create("assets/terrain_config.scn.ron")
+                .and_then(|mut file| file.write(serialized_scene.as_bytes()))
+                .expect("Error while writing scene to file");
+        })
+        .detach();
 }
