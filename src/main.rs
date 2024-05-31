@@ -131,16 +131,7 @@ fn spawn_camera(mut commands: Commands, asset_server: Res<AssetServer>) {
                 brightness: 2000.0,
             },
             CameraController::default(),
-            VolumetricFogSettings {
-                ambient_intensity: 0.1,
-                // fog_color: Srgba::new(1.0, 0.75, 0.0, 1.0).into(),
-                // light_tint: Srgba::new(1.0, 0.75, 0.0, 1.0).into(),
-                light_intensity: 1.5,
-                // absorption: 0.5,
-                // scattering: 0.8,
-                // density: 0.3,
-                ..default()
-            },
+            VolumetricFogSettings::default(),
             DepthPrepass,
             DeferredPrepass,
             ScreenSpaceReflectionsSettings::default(),

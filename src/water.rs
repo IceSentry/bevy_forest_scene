@@ -55,7 +55,7 @@ pub fn spawn_water(
         mesh: meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(1.0))),
         material: water_materials.add(ExtendedMaterial {
             base: StandardMaterial {
-                base_color: Srgba::new(0.0, 0.0, 0.3, 1.0).into(),
+                base_color: BLACK.into(),
                 perceptual_roughness: 0.0,
                 ..default()
             },
