@@ -57,7 +57,7 @@ pub fn load_terrain_config(mut commands: Commands, asset_server: Res<AssetServer
 
 pub fn on_terrain_config_loaded(
     mut commands: Commands,
-    terrain_config: Option<Res<TerrainConfig>>,
+    terrain_config: Res<TerrainConfig>,
     terrain_resources: Option<Res<TerrainResources>>,
     despawn_on_reload: Query<Entity, With<DespawnOnTerrainReload>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -65,13 +65,7 @@ pub fn on_terrain_config_loaded(
     let Some(terrain_resources) = terrain_resources else {
         return;
     };
-    let Some(terrain_config) = terrain_config else {
-        return;
-    };
 
-    if !terrain_config.is_changed() {
-        return;
-    }
     println!("terrain config changed {:?}", terrain_config);
 
     // despawn any previous entities

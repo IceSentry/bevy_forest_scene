@@ -1,6 +1,7 @@
 use std::io::Write;
 
 use bevy::{
+    color::palettes::css::WHITE,
     core_pipeline::{
         dof::DepthOfFieldSettings,
         experimental::taa::{TemporalAntiAliasBundle, TemporalAntiAliasPlugin},
@@ -17,7 +18,7 @@ use bevy::{
     tasks::IoTaskPool,
 };
 use camera_controller::CameraController;
-use terrain::TerrainConfig;
+use terrain::{TerrainConfig, TerrainResources};
 
 mod camera_controller;
 mod plane;
@@ -51,6 +52,7 @@ fn main() {
             brightness: 0.0,
         })
         .register_type::<TerrainConfig>()
+        .register_type::<SceneConfig>()
         .add_systems(
             Startup,
             (
@@ -59,6 +61,7 @@ fn main() {
                 water::spawn_water,
                 // save_scene_system,
                 terrain::load_terrain_config,
+                load_scene_config,
             ),
         )
         .add_systems(
@@ -68,10 +71,42 @@ fn main() {
                 terrain::customize_tree_material,
                 terrain::fix_ground_material,
                 toggle_wireframe,
-                terrain::on_terrain_config_loaded,
+                terrain::on_terrain_config_loaded.run_if(
+                    resource_exists::<TerrainResources>
+                        .and_then(resource_exists_and_changed::<TerrainConfig>),
+                ),
+                on_scene_config_loaded.run_if(resource_exists_and_changed::<SceneConfig>),
             ),
         )
         .run();
+}
+
+#[derive(Resource, Reflect, Debug)]
+#[reflect(Resource)]
+struct SceneConfig {
+    env_map_intensity: f32,
+    skybox_brightness: f32,
+    fog_color: Color,
+    fog_ambient_intensity: f32,
+    fog_light_intensity: f32,
+    directional_light_color: Color,
+    directional_light_looking_to: Vec3,
+    tonemapping: Tonemapping,
+}
+
+impl Default for SceneConfig {
+    fn default() -> Self {
+        Self {
+            env_map_intensity: 2000.0,
+            skybox_brightness: 2000.0,
+            fog_color: WHITE.into(),
+            fog_ambient_intensity: 0.1,
+            fog_light_intensity: 1.5,
+            directional_light_color: Srgba::new(1.0, 0.75, 0.0, 1.0).into(),
+            directional_light_looking_to: Vec3::new(-10.0, -1.0, 7.0),
+            tonemapping: Tonemapping::default(),
+        }
+    }
 }
 
 fn spawn_camera(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -150,12 +185,7 @@ fn _save_scene_system(world: &mut World) {
     let mut scene_world = World::new();
     let type_registry = world.resource::<AppTypeRegistry>().clone();
     scene_world.insert_resource(type_registry);
-    // scene_world.insert_resource(TerrainConfig {
-    //     half_size: 200,
-    //     seed: 42,
-    //     frequency: 0.05,
-    //     octaves: 6,
-    // });
+    scene_world.insert_resource(SceneConfig::default());
     let scene = DynamicScene::from_world(&scene_world);
     let type_registry = world.resource::<AppTypeRegistry>();
     let type_registry = type_registry.read();
@@ -167,9 +197,43 @@ fn _save_scene_system(world: &mut World) {
     IoTaskPool::get()
         .spawn(async move {
             // Write the scene RON data to file
-            std::fs::File::create("assets/terrain_config.scn.ron")
+            std::fs::File::create("assets/scene_config.scn.ron")
                 .and_then(|mut file| file.write(serialized_scene.as_bytes()))
                 .expect("Error while writing scene to file");
         })
         .detach();
+}
+
+fn load_scene_config(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn(DynamicSceneBundle {
+        scene: asset_server.load("scene_config.scn.ron"),
+        ..default()
+    });
+}
+
+fn on_scene_config_loaded(
+    scene_config: Res<SceneConfig>,
+    mut camera: Query<(
+        &mut EnvironmentMapLight,
+        &mut Skybox,
+        &mut VolumetricFogSettings,
+        &mut Tonemapping,
+    )>,
+    mut directional_light: Query<(&mut DirectionalLight, &mut Transform)>,
+) {
+    println!("scene config changed");
+
+    for (mut env_map_light, mut skybox, mut fog, mut tonemapping) in &mut camera {
+        env_map_light.intensity = scene_config.env_map_intensity;
+        skybox.brightness = scene_config.skybox_brightness;
+        fog.ambient_intensity = scene_config.fog_ambient_intensity;
+        fog.fog_color = scene_config.fog_color;
+        fog.light_intensity = scene_config.fog_light_intensity;
+        *tonemapping = scene_config.tonemapping;
+    }
+
+    for (mut directional_light, mut transform) in &mut directional_light {
+        directional_light.color = scene_config.directional_light_color;
+        *transform = transform.looking_to(scene_config.directional_light_looking_to, Vec3::Y);
+    }
 }

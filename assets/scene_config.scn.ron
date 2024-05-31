@@ -1,0 +1,29 @@
+(
+  resources: {
+    "bevy_forest_scene::SceneConfig": (
+      env_map_intensity: 2000.0,
+      skybox_brightness: 2000.0,
+      fog_color: Srgba((
+        red: 1.0,
+        green: 1.0,
+        blue: 1.0,
+        alpha: 1.0,
+      )),
+      fog_ambient_intensity: 0.1,
+      fog_light_intensity: 1.0,
+      directional_light_color: Srgba((
+        red: 1.0,
+        green: 0.75,
+        blue: 0.3,
+        alpha: 1.0,
+      )),
+      directional_light_looking_to: (
+        x: -10.0,
+        y: -1.0,
+        z: 7.0,
+      ),
+      tonemapping: TonyMcMapface,
+    ),
+  },
+  entities: {},
+)
