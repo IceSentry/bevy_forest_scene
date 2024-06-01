@@ -5,7 +5,7 @@ use bevy::{
     core_pipeline::{
         dof::DepthOfFieldSettings,
         experimental::taa::{TemporalAntiAliasBundle, TemporalAntiAliasPlugin},
-        motion_blur::{self, MotionBlur, MotionBlurBundle},
+        motion_blur::MotionBlur,
         prepass::{DeferredPrepass, DepthPrepass},
         tonemapping::Tonemapping,
         Skybox,
@@ -75,6 +75,9 @@ fn main() {
                 terrain::on_terrain_config_loaded.run_if(
                     resource_exists::<TerrainResources>
                         .and_then(resource_exists_and_changed::<TerrainConfig>),
+                ),
+                terrain::on_terrain_resource_loaded.run_if(
+                    resource_exists::<TerrainResources>.and_then(resource_exists::<TerrainConfig>),
                 ),
                 on_scene_config_loaded.run_if(resource_exists_and_changed::<SceneConfig>),
             ),

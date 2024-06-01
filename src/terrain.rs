@@ -1,4 +1,5 @@
 use bevy::{
+    gltf::{Gltf, GltfMesh, GltfNode},
     math::{vec2, vec3, Affine2},
     prelude::*,
     render::{
@@ -15,14 +16,106 @@ use crate::plane::Plane;
 #[derive(Resource)]
 pub struct TerrainResources {
     material: Handle<StandardMaterial>,
-    tree: Handle<Scene>,
+    // tree: Handle<Scene>,
+    trees_gltf: Handle<Gltf>,
+    trees: Vec<Handle<Scene>>,
 }
 
 pub fn setup_terrain_resources(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(TerrainResources {
         material: asset_server.load("forest_ground/forest_ground_04_4k.gltf#Material0"),
-        tree: asset_server.load("pine_tree_game-ready.glb#Scene0"),
+        // tree: asset_server.load("japanese_spruce_trees.glb#Scene3"),
+        trees_gltf: asset_server.load("fir_tree_stylized.glb"),
+        trees: vec![],
     });
+}
+
+pub fn on_terrain_resource_loaded(
+    mut terrain_resources: ResMut<TerrainResources>,
+    gltf_assets: Res<Assets<Gltf>>,
+    gltf_nodes: Res<Assets<GltfNode>>,
+    gltf_meshes: Res<Assets<GltfMesh>>,
+    mut scenes: ResMut<Assets<Scene>>,
+    mut terrain_config: ResMut<TerrainConfig>,
+    mut loaded: Local<bool>,
+) {
+    if *loaded {
+        return;
+    }
+    let Some(trees_gltf) = gltf_assets.get(&terrain_resources.trees_gltf) else {
+        return;
+    };
+
+    // tree 0
+    let mut scene_world = World::new();
+    let gltf_node = gltf_nodes.get(&trees_gltf.named_nodes["Branches"]).unwrap();
+    spawn_gltf_node(&mut scene_world, gltf_node, &gltf_meshes);
+    let gltf_node = gltf_nodes
+        .get(&trees_gltf.named_nodes["Tree_bark"])
+        .unwrap();
+    spawn_gltf_node(&mut scene_world, gltf_node, &gltf_meshes);
+    let scene_handle = scenes.add(Scene::new(scene_world));
+    terrain_resources.trees.push(scene_handle);
+
+    // tree 1
+    let mut scene_world = World::new();
+    let gltf_node = gltf_nodes
+        .get(&trees_gltf.named_nodes["Branches001"])
+        .unwrap();
+    spawn_gltf_node(&mut scene_world, gltf_node, &gltf_meshes);
+    let gltf_node = gltf_nodes
+        .get(&trees_gltf.named_nodes["Tree_bark001"])
+        .unwrap();
+    spawn_gltf_node(&mut scene_world, gltf_node, &gltf_meshes);
+    let scene_handle = scenes.add(Scene::new(scene_world));
+    terrain_resources.trees.push(scene_handle);
+
+    // tree 2
+    let mut scene_world = World::new();
+    let gltf_node = gltf_nodes
+        .get(&trees_gltf.named_nodes["Branches002"])
+        .unwrap();
+    spawn_gltf_node(&mut scene_world, gltf_node, &gltf_meshes);
+    let gltf_node = gltf_nodes
+        .get(&trees_gltf.named_nodes["Tree_bark002"])
+        .unwrap();
+    spawn_gltf_node(&mut scene_world, gltf_node, &gltf_meshes);
+    let scene_handle = scenes.add(Scene::new(scene_world));
+    terrain_resources.trees.push(scene_handle);
+
+    terrain_config.set_changed();
+
+    println!("tree scene loaded");
+    *loaded = true;
+}
+
+fn spawn_gltf_node(scene: &mut World, gltf_node: &GltfNode, gltf_meshes: &Assets<GltfMesh>) {
+    if let Some(gltf_mesh) = &gltf_node.mesh {
+        spawn_gltf_mesh(scene, gltf_mesh, gltf_meshes);
+    }
+    // recursion stops once there are no children
+    for gltf_node in &gltf_node.children {
+        spawn_gltf_node(scene, gltf_node, gltf_meshes);
+    }
+}
+
+fn spawn_gltf_mesh(
+    scene: &mut World,
+    gltf_mesh: &Handle<GltfMesh>,
+    gltf_meshes: &Assets<GltfMesh>,
+) {
+    let gltf_mesh = gltf_meshes.get(gltf_mesh).unwrap();
+    for primitive in &gltf_mesh.primitives {
+        scene.spawn(PbrBundle {
+            mesh: primitive.mesh.clone(),
+            material: if let Some(mat) = primitive.material.as_ref() {
+                mat.clone()
+            } else {
+                Default::default()
+            },
+            ..default()
+        });
+    }
 }
 
 #[derive(Resource, Reflect, Debug)]
@@ -32,6 +125,8 @@ pub struct TerrainConfig {
     pub seed: u32,
     pub frequency: f64,
     pub octaves: usize,
+    pub density: f32,
+    pub slope_spawn: f32,
 }
 
 impl Default for TerrainConfig {
@@ -41,6 +136,8 @@ impl Default for TerrainConfig {
             seed: 42,
             frequency: 1.0,
             octaves: 6,
+            density: 0.5,
+            slope_spawn: 0.5,
         }
     }
 }
@@ -58,14 +155,10 @@ pub fn load_terrain_config(mut commands: Commands, asset_server: Res<AssetServer
 pub fn on_terrain_config_loaded(
     mut commands: Commands,
     terrain_config: Res<TerrainConfig>,
-    terrain_resources: Option<Res<TerrainResources>>,
+    terrain_resources: Res<TerrainResources>,
     despawn_on_reload: Query<Entity, With<DespawnOnTerrainReload>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    let Some(terrain_resources) = terrain_resources else {
-        return;
-    };
-
     println!("terrain config changed {:?}", terrain_config);
 
     // despawn any previous entities
@@ -80,35 +173,61 @@ pub fn on_terrain_config_loaded(
 
     let mut rng = StdRng::seed_from_u64(terrain_config.seed as u64);
 
-    for x in -(terrain_config.half_size as i32)..terrain_config.half_size as i32 {
-        for z in -(terrain_config.half_size as i32)..terrain_config.half_size as i32 {
-            let terrain_height = get_terrain_height(&fbm, vec2(x as f32, z as f32));
-            if terrain_height < 0.0 || rng.gen_range(0.0..1.0) < 0.95 {
+    let terrain_mesh = generate_terrain_mesh(&fbm, terrain_config.half_size);
+
+    if !terrain_resources.trees.is_empty() {
+        let positions = terrain_mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .and_then(|a| a.as_float3())
+            .unwrap();
+        let normals = terrain_mesh
+            .attribute(Mesh::ATTRIBUTE_NORMAL)
+            .and_then(|a| a.as_float3())
+            .unwrap();
+        for (pos, n) in positions.iter().zip(normals) {
+            let terrain_height = pos[1];
+
+            if terrain_height < 0.01
+                || rng.gen_range(0.0..1.0) < 1.0 - terrain_config.density
+                || n[1] < terrain_config.slope_spawn
+            {
                 continue;
             }
 
             // add a random offset to make it less grid like
-            let random_offset = vec3(rng.gen_range(-0.5..0.5), 0.0, rng.gen_range(-0.25..0.25));
-            let translation = vec3(x as f32, terrain_height, z as f32) + random_offset;
+            let random_offset = vec3(
+                rng.gen_range(-0.25..0.25),
+                rng.gen_range(-0.05..0.0),
+                rng.gen_range(-0.25..0.25),
+            );
+            let translation = Vec3::from(*pos) + random_offset;
 
             commands.spawn((
                 SceneBundle {
-                    scene: terrain_resources.tree.clone(),
+                    scene: terrain_resources.trees[rng.gen_range(0..terrain_resources.trees.len())]
+                        .clone(),
                     transform: Transform::from_translation(translation)
-                        .with_scale(Vec3::splat(rng.gen_range(0.12..0.15)))
-                        .with_rotation(Quat::from_axis_angle(
-                            Vec3::Y,
-                            rng.gen_range(0.0..std::f32::consts::TAU),
-                        )),
+                        .with_scale(Vec3::splat(
+                            // try to scale it so trees are smaller next to water
+                            rng.gen_range(0.02..0.025) * (1.0 - (terrain_height / 100.0)),
+                        ))
+                        .with_rotation(
+                            Quat::from_axis_angle(Vec3::X, 3.0 * std::f32::consts::FRAC_PI_2)
+                                .mul_quat(Quat::from_axis_angle(
+                                    Vec3::Z,
+                                    rng.gen_range(0.0..std::f32::consts::TAU),
+                                )),
+                        ),
                     ..default()
                 },
                 CustomizeTreeMaterial,
                 DespawnOnTerrainReload,
             ));
         }
+    } else {
+        println!("trees not ready yet");
     }
 
-    let terrain_mesh = generate_terrain_mesh(&fbm, terrain_config.half_size);
     commands
         .spawn(PbrBundle {
             mesh: meshes.add(terrain_mesh),
@@ -140,6 +259,8 @@ fn generate_terrain_mesh<T: NoiseFn<f64, 2>>(fbm: &Fbm<T>, half_size: u32) -> Me
         }
         _ => unreachable!(),
     }
+
+    plane.compute_smooth_normals();
 
     plane
 }
@@ -173,7 +294,7 @@ pub fn fix_ground_material(
         address_mode_v: ImageAddressMode::Repeat,
         ..ImageSamplerDescriptor::linear()
     });
-    material.uv_transform = Affine2::from_scale(vec2(20.0, 20.0));
+    material.uv_transform = Affine2::from_scale(vec2(50.0, 50.0));
 
     *spawned = true;
 }

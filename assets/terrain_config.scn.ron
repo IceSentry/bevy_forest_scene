@@ -5,6 +5,8 @@
       seed: 30,
       frequency: 0.05,
       octaves: 6,
+      density: 0.1,
+      slope_spawn: 0.7,
     ),
   },
   entities: {},
