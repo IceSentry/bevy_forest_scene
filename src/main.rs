@@ -85,7 +85,7 @@ fn main() {
         .run();
 }
 
-#[derive(Resource, Reflect, Debug)]
+#[derive(Resource, Reflect)]
 #[reflect(Resource)]
 struct SceneConfig {
     env_map_intensity: f32,
@@ -98,6 +98,7 @@ struct SceneConfig {
     tonemapping: Tonemapping,
     motion_blur_shutter_angle: f32,
     motion_blur_samples: u32,
+    ssr: ScreenSpaceReflectionsSettings,
 }
 
 impl Default for SceneConfig {
@@ -113,6 +114,7 @@ impl Default for SceneConfig {
             tonemapping: Tonemapping::default(),
             motion_blur_shutter_angle: 0.5,
             motion_blur_samples: 1,
+            ssr: ScreenSpaceReflectionsSettings::default(),
         }
     }
 }
@@ -219,12 +221,15 @@ fn on_scene_config_loaded(
         &mut VolumetricFogSettings,
         &mut Tonemapping,
         &mut MotionBlur,
+        &mut ScreenSpaceReflectionsSettings,
     )>,
     mut directional_light: Query<(&mut DirectionalLight, &mut Transform)>,
 ) {
     println!("scene config changed");
 
-    for (mut env_map_light, mut skybox, mut fog, mut tonemapping, mut motion_blur) in &mut camera {
+    for (mut env_map_light, mut skybox, mut fog, mut tonemapping, mut motion_blur, mut ssr) in
+        &mut camera
+    {
         env_map_light.intensity = scene_config.env_map_intensity;
         skybox.brightness = scene_config.skybox_brightness;
         fog.ambient_intensity = scene_config.fog_ambient_intensity;
@@ -233,6 +238,7 @@ fn on_scene_config_loaded(
         *tonemapping = scene_config.tonemapping;
         motion_blur.shutter_angle = scene_config.motion_blur_shutter_angle;
         motion_blur.samples = scene_config.motion_blur_samples;
+        *ssr = scene_config.ssr;
     }
 
     for (mut directional_light, mut transform) in &mut directional_light {

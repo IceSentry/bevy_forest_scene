@@ -25,6 +25,14 @@
       tonemapping: TonyMcMapface,
       motion_blur_shutter_angle: 1.0,
       motion_blur_samples: 2,
+      ssr: ScreenSpaceReflectionsSettings (
+        perceptual_roughness_threshold: 0.1,
+        linear_steps: 16,
+        bisection_steps: 4,
+        use_secant: true,
+        thickness: 4.0,
+        linear_march_exponent: 1.0,
+      )
     ),
   },
   entities: {},
