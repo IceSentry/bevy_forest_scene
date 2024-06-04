@@ -1,10 +1,14 @@
+use std::sync::Arc;
+
 use bevy::{
     gltf::{Gltf, GltfMesh, GltfNode},
     math::{vec2, vec3, Affine2},
+    pbr::{ExtendedMaterial, MaterialExtension},
     prelude::*,
     render::{
         mesh::VertexAttributeValues,
-        texture::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor},
+        render_resource::{AsBindGroup, ShaderRef, TextureFormat},
+        texture::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor},
     },
     scene::SceneInstance,
 };
@@ -15,7 +19,7 @@ use crate::plane::Plane;
 
 #[derive(Resource)]
 pub struct TerrainResources {
-    material: Handle<StandardMaterial>,
+    // material: Handle<StandardMaterial>,
     // tree: Handle<Scene>,
     trees_gltf: Handle<Gltf>,
     trees: Vec<Handle<Scene>>,
@@ -23,7 +27,7 @@ pub struct TerrainResources {
 
 pub fn setup_terrain_resources(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(TerrainResources {
-        material: asset_server.load("forest_ground/forest_ground_04_4k.gltf#Material0"),
+        // material: asset_server.load("forest_ground/forest_ground_04_4k.gltf#Material0"),
         // tree: asset_server.load("japanese_spruce_trees.glb#Scene3"),
         trees_gltf: asset_server.load("fir_tree_stylized.glb"),
         trees: vec![],
@@ -127,6 +131,7 @@ pub struct TerrainConfig {
     pub octaves: usize,
     pub density: f32,
     pub slope_spawn: f32,
+    pub use_depth_map: bool,
 }
 
 impl Default for TerrainConfig {
@@ -138,6 +143,7 @@ impl Default for TerrainConfig {
             octaves: 6,
             density: 0.5,
             slope_spawn: 0.5,
+            use_depth_map: false,
         }
     }
 }
@@ -158,6 +164,9 @@ pub fn on_terrain_config_loaded(
     terrain_resources: Res<TerrainResources>,
     despawn_on_reload: Query<Entity, With<DespawnOnTerrainReload>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut std_materials: ResMut<Assets<StandardMaterial>>,
+    mut terrain_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, TerrainMaterial>>>,
+    asset_server: Res<AssetServer>,
 ) {
     println!("terrain config changed {:?}", terrain_config);
 
@@ -228,10 +237,52 @@ pub fn on_terrain_config_loaded(
         println!("trees not ready yet");
     }
 
+    fn terrain_sampler() -> ImageSampler {
+        ImageSampler::Descriptor(ImageSamplerDescriptor {
+            label: Some("terrain sampler".into()),
+            address_mode_u: ImageAddressMode::Repeat,
+            address_mode_v: ImageAddressMode::Repeat,
+            ..ImageSamplerDescriptor::linear()
+        })
+    }
     commands
-        .spawn(PbrBundle {
+        .spawn(MaterialMeshBundle {
             mesh: meshes.add(terrain_mesh),
-            material: terrain_resources.material.clone(),
+            material: std_materials.add(StandardMaterial {
+                uv_transform: Affine2::from_scale(vec2(25.0, 25.0)),
+                base_color_texture: Some(asset_server.load_with_settings(
+                    "forest_ground/textures/forest_ground_04_diff_4k.jpg",
+                    |s: &mut ImageLoaderSettings| {
+                        s.sampler = terrain_sampler();
+                    },
+                )),
+                normal_map_texture: Some(asset_server.load_with_settings(
+                    "forest_ground/textures/forest_ground_04_nor_gl_4k.jpg",
+                    |s: &mut ImageLoaderSettings| {
+                        s.sampler = terrain_sampler();
+                    },
+                )),
+                perceptual_roughness: 1.0,
+                metallic_roughness_texture: Some(asset_server.load_with_settings(
+                    "forest_ground/textures/forest_ground_04_rough_4k.jpg",
+                    |s: &mut ImageLoaderSettings| {
+                        s.sampler = terrain_sampler();
+                    },
+                )),
+                parallax_depth_scale: 0.1,
+                parallax_mapping_method: ParallaxMappingMethod::Relief { max_steps: 4 },
+                depth_map: terrain_config.use_depth_map.then(|| {
+                    asset_server.load_with_settings(
+                        "forest_ground/textures/forest_ground_04_disp_4k.jpg",
+                        |s: &mut ImageLoaderSettings| {
+                            s.sampler = terrain_sampler();
+                        },
+                    )
+                }),
+                opaque_render_method: bevy::pbr::OpaqueRendererMethod::Deferred,
+                double_sided: true,
+                ..Default::default()
+            }),
             ..default()
         })
         .insert(DespawnOnTerrainReload);
@@ -261,6 +312,7 @@ fn generate_terrain_mesh<T: NoiseFn<f64, 2>>(fbm: &Fbm<T>, half_size: u32) -> Me
     }
 
     plane.compute_smooth_normals();
+    plane.generate_tangents().unwrap();
 
     plane
 }
@@ -271,32 +323,34 @@ pub fn fix_ground_material(
     mut images: ResMut<Assets<Image>>,
     mut spawned: Local<bool>,
 ) {
-    if *spawned {
-        return;
-    }
-    let Some(terrain_resources) = terrain_resources else {
-        return;
-    };
-    let Some(material) = std_materials.get_mut(&terrain_resources.material) else {
-        return;
-    };
-    let Some(image) = material
-        .base_color_texture
-        .as_ref()
-        .and_then(|t| images.get_mut(t))
-    else {
-        return;
-    };
+    // if *spawned {
+    //     return;
+    // }
+    // let Some(terrain_resources) = terrain_resources else {
+    //     return;
+    // };
+    // let Some(material) = std_materials.get_mut(&terrain_resources.material) else {
+    //     return;
+    // };
+    // let Some(image) = material
+    //     .base_color_texture
+    //     .as_ref()
+    //     .and_then(|t| images.get_mut(t))
+    // else {
+    //     return;
+    // };
 
-    image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-        label: Some("terrain sampler".into()),
-        address_mode_u: ImageAddressMode::Repeat,
-        address_mode_v: ImageAddressMode::Repeat,
-        ..ImageSamplerDescriptor::linear()
-    });
-    material.uv_transform = Affine2::from_scale(vec2(50.0, 50.0));
+    // image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+    //     label: Some("terrain sampler".into()),
+    //     address_mode_u: ImageAddressMode::Repeat,
+    //     address_mode_v: ImageAddressMode::Repeat,
+    //     ..ImageSamplerDescriptor::linear()
+    // });
+    // // image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
+    // // image.
+    // // material.uv_transform = Affine2::from_scale(vec2(50.0, 50.0));
 
-    *spawned = true;
+    // *spawned = true;
 }
 
 #[derive(Component)]
@@ -324,5 +378,17 @@ pub fn customize_tree_material(
             material.metallic = 0.0;
             material.reflectance = 0.0;
         }
+    }
+}
+
+#[derive(Asset, TypePath, AsBindGroup, Clone)]
+pub struct TerrainMaterial {
+    // #[texture(100)]
+    // ground_displacement: Handle<Image>,
+}
+
+impl MaterialExtension for TerrainMaterial {
+    fn deferred_fragment_shader() -> ShaderRef {
+        "terrain.wgsl".into()
     }
 }

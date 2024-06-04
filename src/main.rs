@@ -19,7 +19,7 @@ use bevy::{
     tasks::IoTaskPool,
 };
 use camera_controller::CameraController;
-use terrain::{TerrainConfig, TerrainResources};
+use terrain::{TerrainConfig, TerrainMaterial, TerrainResources};
 use water::FoamMaterial;
 
 mod camera_controller;
@@ -43,6 +43,7 @@ fn main() {
             WireframePlugin,
             MaterialPlugin::<FoamMaterial>::default(),
             MaterialPlugin::<ExtendedMaterial<StandardMaterial, water::Water>>::default(),
+            MaterialPlugin::<ExtendedMaterial<StandardMaterial, TerrainMaterial>>::default(),
         ))
         .insert_resource(WireframeConfig {
             global: false,
