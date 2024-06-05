@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use bevy::{
     gltf::{Gltf, GltfMesh, GltfNode},
     math::{vec2, vec3, Affine2},
@@ -7,7 +5,7 @@ use bevy::{
     prelude::*,
     render::{
         mesh::VertexAttributeValues,
-        render_resource::{AsBindGroup, ShaderRef, ShaderType, TextureFormat},
+        render_resource::{AsBindGroup, ShaderRef, ShaderType},
         texture::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor},
     },
     scene::SceneInstance,
@@ -158,13 +156,13 @@ pub fn load_terrain_config(mut commands: Commands, asset_server: Res<AssetServer
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn on_terrain_config_loaded(
     mut commands: Commands,
     terrain_config: Res<TerrainConfig>,
     terrain_resources: Res<TerrainResources>,
     despawn_on_reload: Query<Entity, With<DespawnOnTerrainReload>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut std_materials: ResMut<Assets<StandardMaterial>>,
     mut terrain_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, TerrainMaterial>>>,
     asset_server: Res<AssetServer>,
 ) {
@@ -324,42 +322,6 @@ fn generate_terrain_mesh<T: NoiseFn<f64, 2>>(fbm: &Fbm<T>, half_size: u32) -> Me
     plane.generate_tangents().unwrap();
 
     plane
-}
-
-pub fn fix_ground_material(
-    terrain_resources: Option<Res<TerrainResources>>,
-    mut std_materials: ResMut<Assets<StandardMaterial>>,
-    mut images: ResMut<Assets<Image>>,
-    mut spawned: Local<bool>,
-) {
-    // if *spawned {
-    //     return;
-    // }
-    // let Some(terrain_resources) = terrain_resources else {
-    //     return;
-    // };
-    // let Some(material) = std_materials.get_mut(&terrain_resources.material) else {
-    //     return;
-    // };
-    // let Some(image) = material
-    //     .base_color_texture
-    //     .as_ref()
-    //     .and_then(|t| images.get_mut(t))
-    // else {
-    //     return;
-    // };
-
-    // image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-    //     label: Some("terrain sampler".into()),
-    //     address_mode_u: ImageAddressMode::Repeat,
-    //     address_mode_v: ImageAddressMode::Repeat,
-    //     ..ImageSamplerDescriptor::linear()
-    // });
-    // // image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
-    // // image.
-    // // material.uv_transform = Affine2::from_scale(vec2(50.0, 50.0));
-
-    // *spawned = true;
 }
 
 #[derive(Component)]

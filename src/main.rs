@@ -71,7 +71,6 @@ fn main() {
             (
                 camera_controller::camera_controller,
                 terrain::customize_tree_material,
-                terrain::fix_ground_material,
                 toggle_wireframe,
                 terrain::on_terrain_config_loaded.run_if(
                     resource_exists::<TerrainResources>
