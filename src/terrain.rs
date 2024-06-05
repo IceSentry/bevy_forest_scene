@@ -130,6 +130,7 @@ pub struct TerrainConfig {
     pub density: f32,
     pub max_steepness: f32,
     pub use_depth_map: bool,
+    pub rotation: f32,
 }
 
 impl Default for TerrainConfig {
@@ -142,6 +143,7 @@ impl Default for TerrainConfig {
             density: 0.5,
             max_steepness: 0.5,
             use_depth_map: false,
+            rotation: 0.0,
         }
     }
 }
@@ -181,6 +183,8 @@ pub fn on_terrain_config_loaded(
     let mut rng = StdRng::seed_from_u64(terrain_config.seed as u64);
 
     let terrain_mesh = generate_terrain_mesh(&fbm, terrain_config.half_size);
+    let terrain_mesh =
+        terrain_mesh.rotated_by(Quat::from_axis_angle(Vec3::Y, terrain_config.rotation));
 
     if !terrain_resources.trees.is_empty() {
         let positions = terrain_mesh

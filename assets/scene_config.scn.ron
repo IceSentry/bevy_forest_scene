@@ -13,8 +13,8 @@
       fog_light_intensity: 1.0,
       directional_light_color: Srgba((
         red: 1.0,
-        green: 0.75,
-        blue: 0.3,
+        green: 0.875,
+        blue: 0.75,
         alpha: 1.0,
       )),
       directional_light_looking_to: (
@@ -32,6 +32,14 @@
         use_secant: true,
         thickness: 4.0,
         linear_march_exponent: 1.0,
+      ),
+      camera_walk_speed: 5.0,
+      color_grading: ColorGradingSection (
+        saturation: 1.0,
+        contrast: 1.0,
+        gamma: 1.0,
+        gain: 2.5,
+        lift: -0.25,
       )
     ),
   },

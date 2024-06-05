@@ -16,6 +16,7 @@ use bevy::{
         ScreenSpaceReflectionsSettings, VolumetricFogSettings, VolumetricLight,
     },
     prelude::*,
+    render::view::{ColorGrading, ColorGradingGlobal, ColorGradingSection},
     tasks::IoTaskPool,
 };
 use camera_controller::CameraController;
@@ -99,6 +100,8 @@ struct SceneConfig {
     motion_blur_shutter_angle: f32,
     motion_blur_samples: u32,
     ssr: ScreenSpaceReflectionsSettings,
+    camera_walk_speed: f32,
+    color_grading: ColorGradingSection,
 }
 
 impl Default for SceneConfig {
@@ -115,6 +118,8 @@ impl Default for SceneConfig {
             motion_blur_shutter_angle: 0.5,
             motion_blur_samples: 1,
             ssr: ScreenSpaceReflectionsSettings::default(),
+            camera_walk_speed: CameraController::default().walk_speed,
+            color_grading: Default::default(),
         }
     }
 }
@@ -148,12 +153,6 @@ fn spawn_camera(mut commands: Commands, asset_server: Res<AssetServer>) {
             ScreenSpaceAmbientOcclusionSettings::default(),
             DepthOfFieldSettings::default(),
             MotionBlur::default(),
-            // ColorGrading {
-            //     global: todo!(),
-            //     shadows: todo!(),
-            //     midtones: todo!(),
-            //     highlights: todo!(),
-            // },
         ))
         .insert(Tonemapping::AcesFitted)
         .insert(TemporalAntiAliasBundle::default());
@@ -222,13 +221,23 @@ fn on_scene_config_loaded(
         &mut Tonemapping,
         &mut MotionBlur,
         &mut ScreenSpaceReflectionsSettings,
+        &mut CameraController,
+        &mut ColorGrading,
     )>,
     mut directional_light: Query<(&mut DirectionalLight, &mut Transform)>,
 ) {
     println!("scene config changed");
 
-    for (mut env_map_light, mut skybox, mut fog, mut tonemapping, mut motion_blur, mut ssr) in
-        &mut camera
+    for (
+        mut env_map_light,
+        mut skybox,
+        mut fog,
+        mut tonemapping,
+        mut motion_blur,
+        mut ssr,
+        mut camera_controller,
+        mut color_grading,
+    ) in &mut camera
     {
         env_map_light.intensity = scene_config.env_map_intensity;
         skybox.brightness = scene_config.skybox_brightness;
@@ -239,6 +248,10 @@ fn on_scene_config_loaded(
         motion_blur.shutter_angle = scene_config.motion_blur_shutter_angle;
         motion_blur.samples = scene_config.motion_blur_samples;
         *ssr = scene_config.ssr;
+        camera_controller.walk_speed = scene_config.camera_walk_speed;
+        color_grading.shadows = scene_config.color_grading;
+        color_grading.midtones = scene_config.color_grading;
+        color_grading.highlights = scene_config.color_grading;
     }
 
     for (mut directional_light, mut transform) in &mut directional_light {
