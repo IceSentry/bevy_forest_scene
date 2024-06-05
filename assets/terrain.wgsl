@@ -13,7 +13,10 @@
 }
 
 
-@group(2) @binding(100) var ground_displacement: texture_2d<f32>;
+struct TerrainMaterialSettings {
+    max_steepness: f32,
+}
+@group(2) @binding(100) var<uniform> settings: TerrainMaterialSettings;
 
 // #define USE_PARALLAX
 // #define USE_TRIPLANAR
@@ -65,13 +68,19 @@ fn triplanar_mapping(
 #endif
 }
 
-
-
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
     // Create the PBR input.
     var pbr_input = pbr_input_from_standard_material(in, is_front);
     // var pbr_input: PbrInput = pbr_input_new();
+
+    let up = vec3(0.0, 1.0, 0.0);
+    let steepness = length(cross(in.world_normal, up));
+    pbr_input.material.base_color = mix(
+        pbr_input.material.base_color,
+        vec4(1.0, 0.0, 0.0, 1.0),
+        saturate(steepness - settings.max_steepness)
+    );
 
 // #ifdef USE_PARALLAX
 //     let V = pbr_input.V;

@@ -7,7 +7,7 @@ use bevy::{
     prelude::*,
     render::{
         mesh::VertexAttributeValues,
-        render_resource::{AsBindGroup, ShaderRef, TextureFormat},
+        render_resource::{AsBindGroup, ShaderRef, ShaderType, TextureFormat},
         texture::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor},
     },
     scene::SceneInstance,
@@ -130,7 +130,7 @@ pub struct TerrainConfig {
     pub frequency: f64,
     pub octaves: usize,
     pub density: f32,
-    pub slope_spawn: f32,
+    pub max_steepness: f32,
     pub use_depth_map: bool,
 }
 
@@ -142,7 +142,7 @@ impl Default for TerrainConfig {
             frequency: 1.0,
             octaves: 6,
             density: 0.5,
-            slope_spawn: 0.5,
+            max_steepness: 0.5,
             use_depth_map: false,
         }
     }
@@ -195,10 +195,11 @@ pub fn on_terrain_config_loaded(
             .unwrap();
         for (pos, n) in positions.iter().zip(normals) {
             let terrain_height = pos[1];
+            let steepness = Vec3::from_array(*n).cross(Vec3::Y).length();
 
             if terrain_height < 0.01
                 || rng.gen_range(0.0..1.0) < 1.0 - terrain_config.density
-                || n[1] < terrain_config.slope_spawn
+                || steepness > terrain_config.max_steepness
             {
                 continue;
             }
@@ -248,40 +249,48 @@ pub fn on_terrain_config_loaded(
     commands
         .spawn(MaterialMeshBundle {
             mesh: meshes.add(terrain_mesh),
-            material: std_materials.add(StandardMaterial {
-                uv_transform: Affine2::from_scale(vec2(25.0, 25.0)),
-                base_color_texture: Some(asset_server.load_with_settings(
-                    "forest_ground/textures/forest_ground_04_diff_4k.jpg",
-                    |s: &mut ImageLoaderSettings| {
-                        s.sampler = terrain_sampler();
-                    },
-                )),
-                normal_map_texture: Some(asset_server.load_with_settings(
-                    "forest_ground/textures/forest_ground_04_nor_gl_4k.jpg",
-                    |s: &mut ImageLoaderSettings| {
-                        s.sampler = terrain_sampler();
-                    },
-                )),
-                perceptual_roughness: 1.0,
-                metallic_roughness_texture: Some(asset_server.load_with_settings(
-                    "forest_ground/textures/forest_ground_04_rough_4k.jpg",
-                    |s: &mut ImageLoaderSettings| {
-                        s.sampler = terrain_sampler();
-                    },
-                )),
-                parallax_depth_scale: 0.1,
-                parallax_mapping_method: ParallaxMappingMethod::Relief { max_steps: 4 },
-                depth_map: terrain_config.use_depth_map.then(|| {
-                    asset_server.load_with_settings(
-                        "forest_ground/textures/forest_ground_04_disp_4k.jpg",
+            material: terrain_materials.add(ExtendedMaterial {
+                base: StandardMaterial {
+                    uv_transform: Affine2::from_scale(vec2(25.0, 25.0)),
+                    base_color_texture: Some(asset_server.load_with_settings(
+                        "forest_ground/textures/forest_ground_04_diff_4k.jpg",
                         |s: &mut ImageLoaderSettings| {
                             s.sampler = terrain_sampler();
                         },
-                    )
-                }),
-                opaque_render_method: bevy::pbr::OpaqueRendererMethod::Deferred,
-                double_sided: true,
-                ..Default::default()
+                    )),
+                    normal_map_texture: Some(asset_server.load_with_settings(
+                        "forest_ground/textures/forest_ground_04_nor_gl_4k.jpg",
+                        |s: &mut ImageLoaderSettings| {
+                            s.sampler = terrain_sampler();
+                        },
+                    )),
+                    perceptual_roughness: 1.0,
+                    metallic_roughness_texture: Some(asset_server.load_with_settings(
+                        "forest_ground/textures/forest_ground_04_rough_4k.jpg",
+                        |s: &mut ImageLoaderSettings| {
+                            s.sampler = terrain_sampler();
+                        },
+                    )),
+                    parallax_depth_scale: 0.1,
+                    parallax_mapping_method: ParallaxMappingMethod::Relief { max_steps: 4 },
+                    depth_map: terrain_config.use_depth_map.then(|| {
+                        asset_server.load_with_settings(
+                            "forest_ground/textures/forest_ground_04_disp_4k.jpg",
+                            |s: &mut ImageLoaderSettings| {
+                                s.sampler = terrain_sampler();
+                            },
+                        )
+                    }),
+                    opaque_render_method: bevy::pbr::OpaqueRendererMethod::Deferred,
+                    double_sided: true,
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                extension: TerrainMaterial {
+                    settings: TerrainMaterialSettings {
+                        max_steepness: terrain_config.max_steepness,
+                    },
+                },
             }),
             ..default()
         })
@@ -381,10 +390,17 @@ pub fn customize_tree_material(
     }
 }
 
+#[derive(Clone, Copy, ShaderType)]
+pub struct TerrainMaterialSettings {
+    max_steepness: f32,
+}
+
 #[derive(Asset, TypePath, AsBindGroup, Clone)]
 pub struct TerrainMaterial {
     // #[texture(100)]
     // ground_displacement: Handle<Image>,
+    #[uniform(100)]
+    settings: TerrainMaterialSettings,
 }
 
 impl MaterialExtension for TerrainMaterial {

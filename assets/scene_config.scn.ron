@@ -27,7 +27,7 @@
       motion_blur_samples: 2,
       ssr: ScreenSpaceReflectionsSettings (
         perceptual_roughness_threshold: 0.1,
-        linear_steps: 16,
+        linear_steps: 8,
         bisection_steps: 4,
         use_secant: true,
         thickness: 4.0,
